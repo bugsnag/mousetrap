@@ -170,7 +170,7 @@
      *
      * @param {Element|HTMLDocument} object
      * @param {string} type
-     * @param {Function} callback
+     * @param {EventListenerOrEventListenerObject} callback
      * @returns void
      */
     function _addEvent(object, type, callback) {
@@ -180,6 +180,22 @@
         }
 
         object.attachEvent('on' + type, callback);
+    }
+
+    /**
+     * cross browser remove event method
+     *
+     * @param {Element|HTMLDocument} object
+     * @param {string} type
+     * @param {EventListenerOrEventListenerObject} callback
+     * @returns void
+     */
+    function _removeEvent(object, type, callback) {
+        if (object.removeEventListener) {
+            object.removeEventListener(type, callback, false);
+            return;
+        }
+        object.detachEvent('on' + type, callback);
     }
 
     /**
@@ -708,36 +724,6 @@
         };
 
         /**
-         * handles a keydown event
-         *
-         * @param {Event} e
-         * @returns void
-         */
-        function _handleKeyEvent(e) {
-
-            // normalize e.which for key events
-            // @see http://stackoverflow.com/questions/4285627/javascript-keycode-vs-charcode-utter-confusion
-            if (typeof e.which !== 'number') {
-                e.which = e.keyCode;
-            }
-
-            var character = _characterFromEvent(e);
-
-            // no character found then stop
-            if (!character) {
-                return;
-            }
-
-            // need to use === for the character check because the character can be 0
-            if (e.type == 'keyup' && _ignoreNextKeyup === character) {
-                _ignoreNextKeyup = false;
-                return;
-            }
-
-            self.handleKey(character, _eventModifiers(e), e);
-        }
-
-        /**
          * called to set a 1 second timeout on the specified sequence
          *
          * this is so after each key press in the sequence you have 1 second
@@ -885,10 +871,40 @@
             }
         };
 
+        /**
+         * handles a keydown event
+         *
+         * @param {Event} e
+         * @returns void
+         */
+        self._handleKeyEvent = function (e) {
+
+            // normalize e.which for key events
+            // @see http://stackoverflow.com/questions/4285627/javascript-keycode-vs-charcode-utter-confusion
+            if (typeof e.which !== 'number') {
+                e.which = e.keyCode;
+            }
+
+            var character = _characterFromEvent(e);
+
+            // no character found then stop
+            if (!character) {
+                return;
+            }
+
+            // need to use === for the character check because the character can be 0
+            if (e.type == 'keyup' && _ignoreNextKeyup === character) {
+                _ignoreNextKeyup = false;
+                return;
+            }
+
+            self.handleKey(character, _eventModifiers(e), e);
+        }
+
         // start!
-        _addEvent(targetElement, 'keypress', _handleKeyEvent);
-        _addEvent(targetElement, 'keydown', _handleKeyEvent);
-        _addEvent(targetElement, 'keyup', _handleKeyEvent);
+        _addEvent(targetElement, 'keypress', self._handleKeyEvent);
+        _addEvent(targetElement, 'keydown', self._handleKeyEvent);
+        _addEvent(targetElement, 'keyup', self._handleKeyEvent);
     }
 
     /**
@@ -962,6 +978,28 @@
         self._directMap = {};
         return self;
     };
+
+    /**
+     * destroy mousetrap object
+     *
+     * - call reset on the mousetrap object ( removing all binding )
+     * - remove all javascript event listener from target element or document
+     * - remove all reference to target
+     *
+     * @return void
+     */
+    Mousetrap.prototype.destroy = function () {
+        var self = this
+
+        self.reset()
+
+        _removeEvent(self.target, 'keypress', self._handleKeyEvent);
+        _removeEvent(self.target, 'keydown', self._handleKeyEvent);
+        _removeEvent(self.target, 'keyup', self._handleKeyEvent);
+
+        self.target = undefined
+        self._handleKeyEvent = undefined
+    }
 
     /**
      * should we stop this event before firing off callbacks
